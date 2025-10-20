@@ -1,0 +1,10 @@
+langchain==0.2.14
+langchain-core==0.2.32
+langchain-community==0.2.11
+langchain-experimental==0.0.62
+langchain-openai==0.1.17
+pandas
+dotenv
+bs4
+requests
+cloudscraper
