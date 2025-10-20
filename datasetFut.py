@@ -113,12 +113,12 @@ def fbref_extract_team_performance(
     url: str,
     tables=(
         "matchlogs_for",
-        "stats_standard_24",
-        "stats_shooting_24",
-        "stats_passing_24",
-        "stats_defense_24",
-        "stats_possession_24",
-        "stats_misc_24"
+        "stats_standard_combined",
+        "stats_shooting_combined",
+        "stats_passing_combined",
+        "stats_defense_combined",
+        "stats_possession_combined",
+        "stats_misc_combined"
     ),
 ) -> dict:
     out = {}
@@ -228,7 +228,8 @@ def ask_agent(query: str):
 if __name__ == "__main__":
     #url_pl = "https://fbref.com/en/comps/9/Premier-League-Stats"
     #url_pl = "https://fbref.com/en/squads/639950ae/Flamengo-Stats"
-    url_pl = "file://data/Flamengo Stats, Série A _ FBref.com.html"
+    #url_pl = "file://data/Flamengo Stats, Série A _ FBref.com.html"
+    url_pl = "file://data/Flamengo Stats, All Competitions _ FBref.com.html"
     
     load_dotenv('.env')
   
@@ -283,11 +284,11 @@ if __name__ == "__main__":
     partida = tables["matchlogs_for"]
     
     # merged agora recebe o tabelao unindo todas as tabelas de estatísticas de jogadores
-    merged = safe_merge(tables["stats_standard_24"], tables["stats_shooting_24"])
-    merged = safe_merge(merged, tables["stats_passing_24"])
-    merged = safe_merge(merged, tables["stats_defense_24"])
-    merged = safe_merge(merged, tables["stats_possession_24"])
-    merged = safe_merge(merged, tables["stats_misc_24"])
+    merged = safe_merge(tables["stats_standard_combined"], tables["stats_shooting_combined"])
+    merged = safe_merge(merged, tables["stats_passing_combined"])
+    merged = safe_merge(merged, tables["stats_defense_combined"])
+    merged = safe_merge(merged, tables["stats_possession_combined"])
+    merged = safe_merge(merged, tables["stats_misc_combined"])
             
     # Arquivo do tabelão combinado
     out_path = os.path.join(out_dir, f"stats_combinada.csv")
@@ -305,14 +306,18 @@ if __name__ == "__main__":
     }
 
     
-    query = "Considerando que o oponente vai jogar no 3-4-3, qual a média de gols do Flamengo (GF) esperada para esse jogo? Quantos jogos o flamengo ganho por 3 gols ou mais?"
-    response = agents["partidas"].invoke(query)
-    print (response["output"])
+#    query = "Considerando que o oponente vai jogar no 3-4-3, qual a média de gols do Flamengo (GF) esperada para esse jogo? Quantos jogos o flamengo ganho por 3 gols ou mais?"
+#    response = agents["partidas"].invoke(query)
+#    print (response["output"])
 
 #    query = "O numero de gol está na coluna 'Standard Gls'. Depois de converter a coluna para numérico, responda quem foi o maior goleador?"
 #    response = agents["jogadores"].invoke(query)
 #    print (response["output"])
     
-    query = "Qual jogador tem mais desarmes com ganhos? Quantos desarmes desse tipo ele fez?"
+#    query = "Qual jogador tem mais desarmes com ganhos? Quantos desarmes desse tipo ele fez?"
+#    response = agents["jogadores"].invoke(query)
+#    print (response["output"])
+    
+    query = "Qual jogador deu mais passes para gol? Quantos passes para gol ele deu?"
     response = agents["jogadores"].invoke(query)
     print (response["output"])
