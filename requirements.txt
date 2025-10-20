@@ -8,3 +8,6 @@ dotenv
 bs4
 requests
 cloudscraper
+lxml
+html5lib
+tabulate

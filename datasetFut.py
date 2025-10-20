@@ -204,7 +204,7 @@ def ask_agent(query: str):
 if __name__ == "__main__":
     #url_pl = "https://fbref.com/en/comps/9/Premier-League-Stats"
     #url_pl = "https://fbref.com/en/squads/639950ae/Flamengo-Stats"
-    url_pl = "file:///home/jpginglass/Documentos/projetosvscode/projstreamtest/Flamengo Stats, Série A _ FBref.com.html"
+    url_pl = "file://data/Flamengo Stats, Série A _ FBref.com.html"
     
     load_dotenv('.env')
   
