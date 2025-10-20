@@ -29,7 +29,7 @@ HEADERS = {
     "Connection": "keep-alive",
 }
 
-POSSIBLE_KEYS = ["Squad", "Team", "Club", "Equipe"]  # nomes que o FBref usa
+POSSIBLE_KEYS = ["Player"]  # nomes que o FBref usa
 
 # =========================================
 # HELPERS
@@ -158,25 +158,49 @@ def safe_merge(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     if not isinstance(left, pd.DataFrame) or not isinstance(right, pd.DataFrame):
         return left
 
-    lk = _detect_join_key(left)
-    rk = _detect_join_key(right)
+    # Mantém só colunas novas
+    common_cols = [c for c in right.columns if c in left.columns and c != "Player"]
+    right = right.drop(columns=common_cols)
+    return left.merge(right, on="Player", how="left")
 
-    # Se nenhuma chave, não mergeia
-    if lk is None and rk is None:
-        print("[aviso] nenhum campo de chave encontrado; mantendo o da esquerda.")
-        return left
 
-    # Renomeia ambos para 'Squad' e junta
-    if lk and lk != "Squad":
-        left = left.rename(columns={lk: "Squad"})
-    if rk and rk != "Squad":
-        right = right.rename(columns={rk: "Squad"})
+import pandas as pd
 
-    if "Squad" not in left.columns or "Squad" not in right.columns:
-        print("[aviso] ainda sem 'Squad' em ambos; mantendo o da esquerda.")
-        return left
+def convert_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converte automaticamente todas as colunas de um DataFrame
+    para tipo numérico (float/int) quando o conteúdo for numérico.
+    - Remove vírgulas, %, e espaços.
+    - Ignora colunas puramente textuais.
+    """
 
-    return left.merge(right, on="Squad", how="left")
+    df_converted = df.copy()
+
+    for col in df_converted.columns:
+        # Pula colunas completamente vazias
+        if df_converted[col].isna().all():
+            continue
+
+        # Tenta converter para número (substituindo vírgulas por pontos etc.)
+        df_converted[col] = (
+            df_converted[col]
+            .astype(str)
+            .str.replace(",", ".", regex=False)
+            .str.replace("%", "", regex=False)
+            .str.replace("nan","", regex=False)
+            .str.strip()
+        )
+
+        # Converte de fato para numérico se possível
+        try:
+             df_converted[col] = pd.to_numeric(df_converted[col])
+        except ValueError:
+            # Se falhar, mantém como string
+            print(f"[info] Coluna '{col}' não é numérica, mantendo como string.")
+            df_converted[col] = df_converted[col].astype(str)
+
+    return df_converted
+
 
 # === 5. Função mestre: escolhe o agente conforme a pergunta ===
 def ask_agent(query: str):
@@ -210,68 +234,85 @@ if __name__ == "__main__":
   
     print(f"[info] cwd: {os.getcwd()}")
     tables = fbref_extract_team_performance(url_pl)
+    
+    # Garante diretório de saída e salva com caminho absoluto
+    out_dir = os.path.join(os.getcwd(), "out")
+    os.makedirs(out_dir, exist_ok=True)
 
-    std = add_context_columns(
-        tables["stats_standard_24"], competition="Serie A"
-    )
-    
-    table_partida = tables["matchlogs_for"]
-    table_shooting = tables["stats_shooting_24"]
-    table_passing = tables["stats_passing_24"]
-    table_defense = tables["stats_defense_24"]
-    table_possession = tables["stats_possession_24"]
-    table_misc = tables["stats_misc_24"]
-    
-    print(table_partida.head(20))
-    #merged = safe_merge(std, tables["matchlogs_for"])
-    #merged = safe_merge(merged, tables["stats_shooting_24"])
-    #merged = safe_merge(merged, tables["stats_passing_24"])
-    #merged = safe_merge(merged, tables["stats_defense_24"])
-    #merged = safe_merge(merged, tables["stats_possession_24"])
-    #merged = safe_merge(merged, tables["stats_misc_24"])
-    
+    # Trata cada tabela para normalizar colunas e limpar linhas desnecessárias
     for tabela in tables.keys():
-        
-        # Garante diretório de saída e salva com caminho absoluto
-        out_dir = os.path.join(os.getcwd(), "out")
-        os.makedirs(out_dir, exist_ok=True)
+        # Gera nome dos arquivos de saída, um para cada tabela com o nome da tabela       
         out_path = os.path.join(out_dir, f"{tabela}.csv")
 
+        # merged aqui é nome da variavel da tabela temporária para tratamento e exportação para arquivo
         merged = tables[tabela]
+        
+        # Remove coluna que fica com nome estranho ao ler de comentário HTML
         merged.columns = merged.columns.str.replace(r'^Unnamed [0-9]+_level_[0-9]+', '', regex=True).str.strip()
+        
+        # Pega o nome da primeira coluna que será chave (nome de jogador na maioria dos casos)
         primeira_coluna = merged.columns[0]
+        
+        # Remove header no meio da tabela e linhas desnecessárias
         merged = merged[~merged[primeira_coluna].astype(str).str.contains("Player|Total|Date", na=False)]
         merged = merged[merged[primeira_coluna].notna()]
         merged = merged[merged[primeira_coluna].astype(str).str.strip() != ""]
         merged = merged[~merged[primeira_coluna].isin(['Total'])]
+        
+        # Converte o que for numero
+        merged = convert_numeric_columns(merged)
+        
+        # Refaz o indice e atualiza dicionáiro de tabelas
         merged.reset_index(drop=True, inplace=True)
+        
         tables[tabela] = merged
         
+        # Escreve o arquivo csv
         if isinstance(merged, pd.DataFrame) and not merged.empty:
             merged.to_csv(out_path, index=False)
             print(f"\n✅ Arquivo salvo em: {out_path}")
             print(f"Linhas: {len(merged)}, Colunas: {merged.shape[1]}")
             print(f"Colunas-chave detectadas: {', '.join([c for c in merged.columns if c in POSSIBLE_KEYS or c=='Squad'])}")
-            print(merged.head(3))
+            # DEBUG
+            # print(merged.head(3))
             
         else:
             print("\n⚠️ Nada para salvar (DataFrame vazio). Verifique as mensagens de [aviso] acima.")
+
+    # Dataframe com info das partidas
+    partida = tables["matchlogs_for"]
+    
+    # merged agora recebe o tabelao unindo todas as tabelas de estatísticas de jogadores
+    merged = safe_merge(tables["stats_standard_24"], tables["stats_shooting_24"])
+    merged = safe_merge(merged, tables["stats_passing_24"])
+    merged = safe_merge(merged, tables["stats_defense_24"])
+    merged = safe_merge(merged, tables["stats_possession_24"])
+    merged = safe_merge(merged, tables["stats_misc_24"])
             
+    # Arquivo do tabelão combinado
+    out_path = os.path.join(out_dir, f"stats_combinada.csv")
+    merged.to_csv(out_path, index=False)
+
+           
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
-    # === 4. Crie um agente para cada DataFrame ===
-    agents = {name: create_pandas_dataframe_agent(llm, df, verbose=True, allow_dangerous_code=True)
-            for name, df in tables.items()}
+    # === 4. Crie dois agentes: para partida e para jogadore
+    agente_partida = create_pandas_dataframe_agent(llm, partida, verbose=True, allow_dangerous_code=True)
+    agente_jogador = create_pandas_dataframe_agent(llm, merged, verbose=True, allow_dangerous_code=True)
+    agents = {
+        "partidas": agente_partida,
+        "jogadores": agente_jogador
+    }
 
-    #query = "Converta as coluna GF e GA para numerico e faça a diferença. Verifique a maior e a menor diferenca e indique quais foram as partidas e oponente. Diga também qual foi a média de GA quando o opentente (coluna Opponent) usou a formação 4-2-3-1 (coluna 'Opp Formation')"
-    #response = agents["matchlogs_for"].invoke(query)
-    #print (response["output"])
-
-    query = "Considerando que o Oponente vai jogar no 3-4-3, qual a média de gols do Flamengo (GF) esperada para esse jogo?"
-    #query = "Qual é a formação do oponente (coluna 'Opp Formation') em que o Flamengo tem a maior média de gols? QUal é a média de gols do oponente nessa formação?"
-    response = agents["matchlogs_for"].invoke(query)
+    
+    query = "Considerando que o oponente vai jogar no 3-4-3, qual a média de gols do Flamengo (GF) esperada para esse jogo? Quantos jogos o flamengo ganho por 3 gols ou mais?"
+    response = agents["partidas"].invoke(query)
     print (response["output"])
 
-    #query = "O numero de gol está na coluna 'Standard Gls'. Depois de converter a coluna para numérico, responda quem foi o maior goleador?"
-    #response = agents["stats_shooting_24"].invoke(query)
-    #print (response["output"])
+#    query = "O numero de gol está na coluna 'Standard Gls'. Depois de converter a coluna para numérico, responda quem foi o maior goleador?"
+#    response = agents["jogadores"].invoke(query)
+#    print (response["output"])
+    
+    query = "Qual jogador tem mais desarmes com ganhos? Quantos desarmes desse tipo ele fez?"
+    response = agents["jogadores"].invoke(query)
+    print (response["output"])
