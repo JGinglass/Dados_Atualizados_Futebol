@@ -221,32 +221,13 @@ def ask_agent(query: str):
     response = agents[chosen].invoke(query)
     return response["output"]
 
-
-# =========================================
-# MAIN
-# =========================================
-if __name__ == "__main__":
-    #url_pl = "https://fbref.com/en/comps/9/Premier-League-Stats"
-    #url_pl = "https://fbref.com/en/squads/639950ae/Flamengo-Stats"
-    #url_pl = "file://data/Flamengo Stats, Série A _ FBref.com.html"
-    url_pl = "file://data/Flamengo Stats, All Competitions _ FBref.com.html"
-    
-    load_dotenv('.env')
-  
-    print(f"[info] cwd: {os.getcwd()}")
-    tables = fbref_extract_team_performance(url_pl)
-    
-    # Garante diretório de saída e salva com caminho absoluto
-    out_dir = os.path.join(os.getcwd(), "out")
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Trata cada tabela para normalizar colunas e limpar linhas desnecessárias
-    for tabela in tables.keys():
+def limpardadostabela(tabelas)->dict:
+    for tabela in tabelas.keys():
         # Gera nome dos arquivos de saída, um para cada tabela com o nome da tabela       
-        out_path = os.path.join(out_dir, f"{tabela}.csv")
+        #out_path = os.path.join(out_dir, f"{tabela}.csv")
 
         # merged aqui é nome da variavel da tabela temporária para tratamento e exportação para arquivo
-        merged = tables[tabela]
+        merged = tabelas[tabela]
         
         # Remove coluna que fica com nome estranho ao ler de comentário HTML
         merged.columns = merged.columns.str.replace(r'^Unnamed [0-9]+_level_[0-9]+', '', regex=True).str.strip()
@@ -266,58 +247,82 @@ if __name__ == "__main__":
         # Refaz o indice e atualiza dicionáiro de tabelas
         merged.reset_index(drop=True, inplace=True)
         
-        tables[tabela] = merged
+        tabelas[tabela] = merged
         
-        # Escreve o arquivo csv
-        if isinstance(merged, pd.DataFrame) and not merged.empty:
-            merged.to_csv(out_path, index=False)
-            print(f"\n✅ Arquivo salvo em: {out_path}")
-            print(f"Linhas: {len(merged)}, Colunas: {merged.shape[1]}")
-            print(f"Colunas-chave detectadas: {', '.join([c for c in merged.columns if c in POSSIBLE_KEYS or c=='Squad'])}")
-            # DEBUG
-            # print(merged.head(3))
-            
-        else:
-            print("\n⚠️ Nada para salvar (DataFrame vazio). Verifique as mensagens de [aviso] acima.")
+    return tabelas
 
-    # Dataframe com info das partidas
-    partida = tables["matchlogs_for"]
-    
+def criatabelacombinada_jogadores(tabelas)->pd.DataFrame:
     # merged agora recebe o tabelao unindo todas as tabelas de estatísticas de jogadores
-    merged = safe_merge(tables["stats_standard_combined"], tables["stats_shooting_combined"])
-    merged = safe_merge(merged, tables["stats_passing_combined"])
-    merged = safe_merge(merged, tables["stats_defense_combined"])
-    merged = safe_merge(merged, tables["stats_possession_combined"])
-    merged = safe_merge(merged, tables["stats_misc_combined"])
-            
-    # Arquivo do tabelão combinado
-    out_path = os.path.join(out_dir, f"stats_combinada.csv")
-    merged.to_csv(out_path, index=False)
+    merged = safe_merge(tabelas["stats_standard_combined"], tabelas["stats_shooting_combined"])
+    merged = safe_merge(merged, tabelas["stats_passing_combined"])
+    merged = safe_merge(merged, tabelas["stats_defense_combined"])
+    merged = safe_merge(merged, tabelas["stats_possession_combined"])
+    merged = safe_merge(merged, tabelas["stats_misc_combined"])
+    
+    return merged
 
-           
+def gerarcsvtabelas(tabelas, out_dir)->None:
+    for tabela in tabelas.keys():
+        # Gera nome dos arquivos de saída, um para cada tabela com o nome da tabela       
+        out_path = os.path.join(out_dir, f"{tabela}.csv")
+        
+        # Salva a tabela tratada em CSV
+        tabelas[tabela].to_csv(out_path, index=False)
+        print(f"[ok] Salvou tabela '{tabela}' em: {out_path}")
+        
+        
+def carregardadosfbref(url_pl: str)->dict:
+  
+    print(f"[info] cwd: {os.getcwd()}")
+    tables = fbref_extract_team_performance(url_pl)
+    
+    # Garante diretório de saída e salva com caminho absoluto
+    out_dir = os.path.join(os.getcwd(), "out")
+    os.makedirs(out_dir, exist_ok=True)
+        
+    # Limpa dados das tabelas
+    tabelas_limpa = limpardadostabela(tables)
+    
+    # Salva tabelas limpas em CSV
+    gerarcsvtabelas(tabelas_limpa, out_dir)
+    
+    return tabelas_limpa
+
+def perguntaagente(pd_dataframe: pd.DataFrame, query: str)->str:
+    load_dotenv('.env')
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
-    # === 4. Crie dois agentes: para partida e para jogadore
-    agente_partida = create_pandas_dataframe_agent(llm, partida, verbose=True, allow_dangerous_code=True)
-    agente_jogador = create_pandas_dataframe_agent(llm, merged, verbose=True, allow_dangerous_code=True)
-    agents = {
-        "partidas": agente_partida,
-        "jogadores": agente_jogador
-    }
+    # Cria agente para o DataFrame fornecido
+    agente = create_pandas_dataframe_agent(llm, pd_dataframe, verbose=True, allow_dangerous_code=True)
+    
+    # Invoca o agente com a pergunta
+    response = agente.invoke(query)
+    
+    return response["output"]
 
+# =========================================
+# MAIN
+# =========================================
+if __name__ == "__main__":
+    #url_pl = "https://fbref.com/en/comps/9/Premier-League-Stats"
+    #url_pl = "https://fbref.com/en/squads/639950ae/Flamengo-Stats"
+    #url_pl = "file://data/Flamengo Stats, Série A _ FBref.com.html"
+    url_pl = "file://data/Flamengo Stats, All Competitions _ FBref.com.html"
     
-#    query = "Considerando que o oponente vai jogar no 3-4-3, qual a média de gols do Flamengo (GF) esperada para esse jogo? Quantos jogos o flamengo ganho por 3 gols ou mais?"
-#    response = agents["partidas"].invoke(query)
-#    print (response["output"])
-
-#    query = "O numero de gol está na coluna 'Standard Gls'. Depois de converter a coluna para numérico, responda quem foi o maior goleador?"
-#    response = agents["jogadores"].invoke(query)
-#    print (response["output"])
+    tables = carregardadosfbref(url_pl)
     
-#    query = "Qual jogador tem mais desarmes com ganhos? Quantos desarmes desse tipo ele fez?"
-#    response = agents["jogadores"].invoke(query)
-#    print (response["output"])
+    out_dir = os.path.join(os.getcwd(), "out") 
     
-    query = "Qual jogador deu mais passes para gol? Quantos passes para gol ele deu?"
-    response = agents["jogadores"].invoke(query)
-    print (response["output"])
+    gerarcsvtabelas(tables, out_dir)
+           
+    # Dataframe com info das partidas
+    df_partida = tables["matchlogs_for"]
+    
+    # Dataframe combinado com info dos jogadores
+    df_jogadores = criatabelacombinada_jogadores(tables)
+  
+    query = "Qual jogador tem mais desarmes com ganhos? Quantos desarmes desse tipo ele fez?"
+    print (perguntaagente(df_jogadores, query))
+    
+    query = "Qual foi a partida com melhor resultado?"
+    print (perguntaagente(df_partida, query))
