@@ -293,7 +293,7 @@ def perguntaagente(pd_dataframe: pd.DataFrame, query: str)->str:
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
     # Cria agente para o DataFrame fornecido
-    agente = create_pandas_dataframe_agent(llm, pd_dataframe, verbose=True, allow_dangerous_code=True)
+    agente = create_pandas_dataframe_agent(llm, pd_dataframe, verbose=True, allow_dangerous_code=True,handle_parsing_errors=True)
     
     # Invoca o agente com a pergunta
     response = agente.invoke(query)

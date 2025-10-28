@@ -1,3 +1,4 @@
+from ast import mod
 from dotenv import load_dotenv
 import streamlit as st
 from datasetFut import perguntaagente, carregardadosfbref, criatabelacombinada_jogadores, gerarcsvtabelas
@@ -36,7 +37,11 @@ if "tabela_jogadores" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        
+
+if mode == "Jogadores":
+  st.dataframe(st.session_state.tabela_jogadores)
+else:
+  st.dataframe(st.session_state.tabela_partidas)
  
 # Entrada do usuário (modo chat)
 pergunta = st.chat_input("Digite sua pergunta sobre futebol ⚽")
