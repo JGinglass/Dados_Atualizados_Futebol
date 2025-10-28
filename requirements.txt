@@ -11,3 +11,4 @@ cloudscraper
 lxml
 html5lib
 tabulate
+streamlit
