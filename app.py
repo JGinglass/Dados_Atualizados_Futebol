@@ -7,8 +7,8 @@ import pandas as pd
 @st.cache_data
 def carregar_dados():
     print("Carregando dados...")
-    df_jogadores = pd.read_csv("out/stats_combinada.csv")
-    df_partidas = pd.read_csv("out/matchlogs_for.csv")
+    df_jogadores = pd.read_csv("out/stats/juncaojogadores.csv")
+    df_partidas = pd.read_csv("out/stats/matchlogs_for.csv")
     return df_jogadores, df_partidas
   
   
@@ -22,6 +22,8 @@ with st.sidebar:
     mode = st.radio("Escolha o modo de análise:", ("Jogadores", "Partidas"))
     st.divider()
     
+    st.subheader("Elenco de Jogadores")
+
 
     
 # -------------------------------
